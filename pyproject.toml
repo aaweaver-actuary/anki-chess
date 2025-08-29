@@ -9,6 +9,9 @@ dependencies = [
     "python-chess>=1.999",
 ]
 
+[project.scripts]
+anki-chess = "anki_chess.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
