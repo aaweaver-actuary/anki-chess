@@ -1,7 +1,7 @@
 import pytest
 import argparse
 from unittest.mock import patch, MagicMock
-from anki_chess.pgn2anki import cli
+from anki_chess import cli
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ def test_load_pgn_content_reads_file_content(tmp_path):
     )
 
 
-def test_main_writes_csv_file(monkeypatch, tmp_path):
+def test_main_writes_csv_file_with_explicit_output(monkeypatch, tmp_path):
     pgn_file = tmp_path / "input.pgn"
     pgn_file.write_text("1. e4 e5 *", encoding="utf-8")
     output_file = tmp_path / "output.csv"
@@ -71,7 +71,7 @@ def test_main_writes_csv_file(monkeypatch, tmp_path):
         "emit_csv",
         lambda lines, fp: fp.write('Title,FEN,SAN_SEQ_JSON\nTest,start,"[e4,e5]"\n'),
     )
-    argv = [str(pgn_file), str(output_file)]
+    argv = [str(pgn_file), "--output_csv", str(output_file)]
     with patch("builtins.print"):
         cli.main(argv)
     content = output_file.read_text(encoding="utf-8")
@@ -80,7 +80,35 @@ def test_main_writes_csv_file(monkeypatch, tmp_path):
     )
 
 
-def test_main_prints_summary(monkeypatch, tmp_path):
+def test_main_writes_csv_file_with_default_output(monkeypatch, tmp_path):
+    pgn_file = tmp_path / "input.pgn"
+    pgn_file.write_text("1. e4 e5 *", encoding="utf-8")
+    default_output = tmp_path / "output.csv"
+    fake_lines = [MagicMock(title="Test", san_seq=["e4", "e5"])]
+    monkeypatch.setattr(cli, "parse_pgn_to_lines", lambda *a, **kw: fake_lines)
+    monkeypatch.setattr(
+        cli,
+        "emit_csv",
+        lambda lines, fp: fp.write('Title,FEN,SAN_SEQ_JSON\nTest,start,"[e4,e5]"\n'),
+    )
+    # Change working directory so output.csv is written to tmp_path
+    import os
+
+    old_cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        argv = [str(pgn_file)]
+        with patch("builtins.print"):
+            cli.main(argv)
+        content = default_output.read_text(encoding="utf-8")
+        assert content.startswith("Title,FEN,SAN_SEQ_JSON"), (
+            f"CSV file content does not start with expected header. Got: {content[:50]}"
+        )
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_main_prints_summary_with_explicit_output(monkeypatch, tmp_path):
     pgn_file = tmp_path / "input.pgn"
     pgn_file.write_text("1. e4 e5 *", encoding="utf-8")
     output_file = tmp_path / "output.csv"
@@ -91,9 +119,34 @@ def test_main_prints_summary(monkeypatch, tmp_path):
         "emit_csv",
         lambda lines, fp: fp.write('Title,FEN,SAN_SEQ_JSON\nTest,start,"[e4,e5]"\n'),
     )
-    argv = [str(pgn_file), str(output_file)]
+    argv = [str(pgn_file), "--output_csv", str(output_file)]
     with patch("builtins.print") as mock_print:
         cli.main(argv)
         assert mock_print.called, (
             "Expected main() to print a summary, but print was not called."
         )
+
+
+def test_main_prints_summary_with_default_output(monkeypatch, tmp_path):
+    pgn_file = tmp_path / "input.pgn"
+    pgn_file.write_text("1. e4 e5 *", encoding="utf-8")
+    fake_lines = [MagicMock(title="Test", san_seq=["e4", "e5"])]
+    monkeypatch.setattr(cli, "parse_pgn_to_lines", lambda *a, **kw: fake_lines)
+    monkeypatch.setattr(
+        cli,
+        "emit_csv",
+        lambda lines, fp: fp.write('Title,FEN,SAN_SEQ_JSON\nTest,start,"[e4,e5]"\n'),
+    )
+    import os
+
+    old_cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        argv = [str(pgn_file)]
+        with patch("builtins.print") as mock_print:
+            cli.main(argv)
+            assert mock_print.called, (
+                "Expected main() to print a summary, but print was not called."
+            )
+    finally:
+        os.chdir(old_cwd)

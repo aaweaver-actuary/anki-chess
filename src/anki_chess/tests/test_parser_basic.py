@@ -2,6 +2,57 @@ import pytest
 from anki_chess.pgn2anki.parser import parse_pgn_to_lines
 
 
+def test_parse_empty_pgn_returns_empty_list():
+    lines = parse_pgn_to_lines("")
+    assert lines == [], f"Expected empty list for empty PGN, got {lines}"
+
+
+def test_parse_whitespace_only_pgn_returns_empty_list():
+    lines = parse_pgn_to_lines("   \n\t  ")
+    assert lines == [], f"Expected empty list for whitespace-only PGN, got {lines}"
+
+
+def test_parse_pgn_with_only_headers_returns_empty_list():
+    lines = parse_pgn_to_lines('[Event "Test"]\n[Site "Test"]')
+    assert lines == [], f"Expected empty list for PGN with only headers, got {lines}"
+
+
+def test_parse_pgn_with_only_comments_returns_empty_list():
+    lines = parse_pgn_to_lines("{This is a comment} ;another")
+    assert lines == [], f"Expected empty list for PGN with only comments, got {lines}"
+
+
+def test_parse_pgn_with_only_nags_returns_empty_list():
+    lines = parse_pgn_to_lines("$1 $2 $3")
+    assert lines == [], f"Expected empty list for PGN with only NAGs, got {lines}"
+
+
+def test_parse_pgn_with_deeply_nested_variations():
+    pgn = "1. e4 (1... e5 (1... c5 (1... d6))) 2. Nf3"
+    lines = parse_pgn_to_lines(pgn)
+    assert any("d6" in seq for seq in [x.san_seq for x in lines]), (
+        f"Expected 'd6' in some line, got {[x.san_seq for x in lines]}"
+    )
+
+
+def test_parse_pgn_with_cycle_does_not_crash():
+    # Artificial cycle: create a node that is its own child
+    from anki_chess.pgn2anki.node import Node
+
+    root = Node("e4")
+    root.children.append(root)
+    out = []
+    try:
+        from anki_chess.pgn2anki import parser as parser_mod
+
+        parser_mod._extract_lines_dfs(root, [], out)
+    except RecursionError:  # pragma: no cover
+        assert False, (
+            "Cycle in move tree should not cause RecursionError."
+        )  # pragma: no cover
+    assert out == [], f"Cycle should not produce any lines, got {out}"
+
+
 @pytest.fixture
 def ruy_lopez_pgn():
     return "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 1-0"

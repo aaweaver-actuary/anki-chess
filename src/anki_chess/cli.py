@@ -16,7 +16,7 @@ def _add_title_argument(ap):
 
 
 def _add_output_csv_argument(ap):
-    ap.add_argument("output_csv", type=pathlib.Path)
+    ap.add_argument("--output_csv", type=str, default=None)
     return ap
 
 
@@ -43,9 +43,11 @@ def main(argv=None):
     args = ap.parse_args(argv)
     pgn_text = _load_pgn_content(args)
     lines = parse_pgn_to_lines(pgn_text, max_plies=args.max_plies, title=args.title)
-    with args.output_csv.open("w", encoding="utf-8", newline="") as fp:
+
+    outfile = "output.csv" if args.output_csv is None else args.output_csv
+    with open(outfile, "w", encoding="utf-8", newline="") as fp:
         emit_csv(lines, fp)
-    print(f"Wrote {len(lines)} lines to {args.output_csv}")
+    print(f"Wrote {len(lines)} lines to {outfile}")
 
 
 if __name__ == "__main__":

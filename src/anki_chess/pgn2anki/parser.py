@@ -9,23 +9,30 @@ from .const import PGN_HEADER_REGEX, PGN_COMMENT_REGEX, PGN_MOVE_NUMBER_REGEX
 
 def _tokenize(pgn: str) -> List[str]:
     s = _prep_pgn_for_tokenization(pgn)
-    tokens = []
-    buff = ""
+    tokens, buff = [], ""
     for ch in s:
-        if _is_parenthesis_character(ch):
-            if _contains_non_whitespace_characters(buff):
-                tokens.append(buff.strip())
-            tokens.append(ch)
-            buff = ""
-        elif _is_whitespace_character(ch):
-            if _contains_non_whitespace_characters(buff):
-                tokens.append(buff.strip())
-                buff = ""
-        else:
-            buff += ch
+        buff, tokens = _tokenize_step(ch, buff, tokens)
+    _tokenize_flush_buffer(buff, tokens)
+    return tokens
+
+
+def _tokenize_step(ch: str, buff: str, tokens: list) -> tuple[str, list]:
+    if _is_parenthesis_character(ch):
+        buff = _tokenize_flush_buffer(buff, tokens)
+        tokens.append(ch)
+        buff = ""
+    elif _is_whitespace_character(ch):
+        buff = _tokenize_flush_buffer(buff, tokens)
+        buff = ""
+    else:
+        buff += ch
+    return buff, tokens
+
+
+def _tokenize_flush_buffer(buff: str, tokens: list) -> str:
     if _contains_non_whitespace_characters(buff):
         tokens.append(buff.strip())
-    return tokens
+    return ""
 
 
 def _is_whitespace_character(ch: str) -> bool:
@@ -155,6 +162,19 @@ def _parse_moves(tokens: List[str], i: int = 0) -> Tuple[Node, int]:
 
 
 def _extract_lines_dfs(node: Node, prefix: List[str], out: List[List[str]]):
+    """Thin wrapper for cycle-safe DFS extraction."""
+    _extract_lines_dfs_safe(node, prefix, out, visited=set())
+
+
+def _extract_lines_dfs_safe(
+    node: Node, prefix: List[str], out: List[List[str]], visited: set
+):
+    """Cycle-safe DFS for extracting lines from move tree."""
+    node_id = id(node)
+    if node_id in visited:
+        # Cycle detected, break recursion
+        return
+    visited.add(node_id)
     if node.san is not None:
         prefix = prefix + [node.san]
     if not node.children:
@@ -162,21 +182,27 @@ def _extract_lines_dfs(node: Node, prefix: List[str], out: List[List[str]]):
             out.append(prefix)
         return
     for ch in node.children:
-        _extract_lines_dfs(ch, prefix, out)
+        _extract_lines_dfs_safe(ch, prefix, out, visited)
 
 
 def parse_pgn_to_lines(
     pgn_text: str, max_plies: int | None = None, title: str | None = None
 ) -> List[Line]:
-    tokens = _tokenize(pgn_text)
-    root, _ = _parse_moves(tokens, 0)
-    seqs: List[List[str]] = []
-    _extract_lines_dfs(root, [], seqs)
-    lines: List[Line] = []
-    if not seqs:
-        return lines  # pragma: no cover
+    # Split PGN into games by header lines
+    games = re.split(r"(?=\[Event )", pgn_text)
+    all_lines: List[Line] = []
     base_title = title or "Repertoire Line"
-    for idx, seq in enumerate(seqs, 1):
-        s = seq if max_plies is None else seq[:max_plies]
-        lines.append(Line(title=f"{base_title} #{idx}", san_seq=s))
-    return lines
+    game_idx = 1
+    for game in games:
+        game = game.strip()
+        if not game:
+            continue
+        tokens = _tokenize(game)
+        root, _ = _parse_moves(tokens, 0)
+        seqs: List[List[str]] = []
+        _extract_lines_dfs(root, [], seqs)
+        for seq in seqs:
+            s = seq if max_plies is None else seq[:max_plies]
+            all_lines.append(Line(title=f"{base_title} #{game_idx}", san_seq=s))
+            game_idx += 1
+    return all_lines
