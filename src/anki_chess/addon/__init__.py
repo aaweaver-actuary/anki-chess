@@ -1,0 +1,5 @@
+from aqt.gui_hooks import webview_did_receive_js_message
+from .on_js_bridge_message import on_js_bridge_message
+
+
+webview_did_receive_js_message.append(on_js_bridge_message)

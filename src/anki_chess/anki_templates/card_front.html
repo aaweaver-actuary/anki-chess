@@ -1,0 +1,63 @@
+
+<div id="title">{{Title}}</div>
+<div id="board" style="width: 340px; margin: 10px auto;"></div>
+<div id="status" style="text-align:center; font-weight:600;"></div>
+
+<script src="_chess.js"></script>
+<script src="_chessboard-1.0.0.js"></script>
+<link rel="stylesheet" href="_chessboard-1.0.0.css">
+
+<script>
+(function() {
+  const fen = "{{FEN}}".trim() || "start";
+  const targetSAN = JSON.parse({{SAN_SEQ_JSON}});
+  let step = 0;
+
+  const game = new Chess(fen === "start" ? undefined : fen);
+  const board = Chessboard('board', {
+    position: fen === "start" ? 'start' : fen,
+    draggable: true,
+    pieceTheme: '_chessboard-img/{piece}.png',
+    onDrop: onDrop
+  });
+
+  const statusEl = document.getElementById("status");
+  setStatus("Play the entire line. Any mistake = Again.");
+
+  function setStatus(msg) { statusEl.textContent = msg; }
+  function sanitizeSAN(s) { return s.replace(/[\\u2026]/g, \"...\").replace(/\\s+/g, \"\").trim(); }
+
+  function onDrop(source, target) {
+    const moveObj = game.move({from: source, to: target, promotion: 'q'});
+    if (!moveObj) return 'snapback';
+    const played = sanitizeSAN(moveObj.san);
+    const expected = sanitizeSAN(targetSAN[step] || \"\");
+
+    if (played !== expected) {
+      if (typeof pycmd === 'function') { pycmd(\"fail_line\"); return; }
+      this.draggable = false;
+      setStatus(`Incorrect at move ${step+1}: you played ${played}, expected ${targetSAN[step]}. Press 1 (Again).`);
+      return;
+    }
+    step += 1;
+    if (step === targetSAN.length) {
+      if (typeof pycmd === 'function') { pycmd(\"pass_line\"); return; }
+      setStatus(\"Line complete. Press 3 (Good).\");
+      this.draggable = false;
+      return;
+    }
+    maybeAutoPlayOppReply();
+  }
+
+  function maybeAutoPlayOppReply() {
+    const startTurn = (fen === 'start') ? 'w' : (new Chess(fen).turn());
+    const userShouldMove = (startTurn === 'w') ? (step % 2 === 0) : (step % 2 === 1);
+    if (!userShouldMove && step < targetSAN.length) {
+      const mv = game.move(targetSAN[step], {sloppy: true});
+      if (mv) { step += 1; board.position(game.fen()); }
+    }
+    const remaining = targetSAN.length - step;
+    setStatus(`Good. ${remaining} move${remaining!==1?'s':''} left.`);
+  }
+})();
+</script>
